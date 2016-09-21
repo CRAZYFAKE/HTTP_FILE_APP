@@ -1,7 +1,7 @@
 /**
  * Created by Yc on 2016/6/9.
  */
-~function(){
+~function () {
     marked.setOptions({
         highlight: function (code) {
             return hljs.highlightAuto(code).value;
@@ -11,10 +11,10 @@
     var map = {};
     renderer.heading = function (text, level) {
         var escapedText = text.toLowerCase();
-        if(!!map[text])
-            escapedText+='-'+map[text]++;
+        if (!!map[text])
+            escapedText += '-' + map[text]++;
         else
-            map[text]=1;
+            map[text] = 1;
         return '<h' + level + '><a name="' +
             escapedText +
             '" class="anchor" href="#' +
@@ -22,4 +22,4 @@
             '"><span class="header-link"></span></a>' +
             text + '</h' + level + '>';
     };
-}();
+} ();

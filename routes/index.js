@@ -8,87 +8,119 @@ var archiver = require('archiver');
 var marked = require('marked');
 var hl = require('highlight.js');
 
-function loadZip(file,rela,req,res) {
+function loadZip(file, rela, req, res) {
     var state = fs.statSync(file);
-    var filename = rela.substring(rela.lastIndexOf('/')+1);
-    console.log('zip',filename)
+    var filename = rela.substring(rela.lastIndexOf('/') + 1);
     var archive = archiver('zip');
-    archive.on('error', function(err){throw err;});
+    archive.on('error', function (err) {
+        throw err;
+    });
     archive.pipe(res);
-    if(state.isDirectory()) archive.directory(file,filename);
-    else archive.file(file,{name:filename});
+    if (state.isDirectory()) {
+        archive.directory(file, filename);
+    } else {
+        archive.file(file, { name: filename });
+    }
     archive.finalize();
 }
 
-var statPr = function (root,file) {
-  var deferred = Q.defer();
-  fs.stat(root+'/'+file,function (err, stats) {
-    if(err) deferred.reject(err);
-    else {
-        stats.name = file;
-        stats.type = stats.isDirectory()?'文件夹':'文件';
-        deferred.resolve(stats, root);
-    }
-  });
-  return deferred.promise;
+var statPr = function (root, file) {
+    var deferred = Q.defer();
+    fs.stat(root + '/' + file, function (err, stats) {
+        if (err) {
+            deferred.reject(err);
+        } else {
+            stats.name = file;
+            stats.type = stats.isDirectory() ? '文件夹' : '文件';
+            deferred.resolve(stats, root);
+        }
+    });
+    return deferred.promise;
 };
-var statP = function(root,file){
-	return new Promise(function(resolve){
-	  fs.stat(root+'/'+file,function (err, stats) {
-		var t = {};
-		if(err){
-			t.reason=err;
-			resolve(t);
-		}
-		else {
-		   t.state='ok';
-	       stats.name = file;
-	       stats.type = stats.isDirectory()?'文件夹':'文件';
-		   t.value=stats;
-	       resolve(t);
-	    }
-	  });
-	})
+var statP = function (root, file) {
+    return new Promise(function (resolve) {
+        fs.stat(root + '/' + file, function (err, stats) {
+            var t = {};
+            if (err) {
+                t.reason = err;
+                resolve(t);
+            }
+            else {
+                t.state = 'ok';
+                stats.name = file;
+                stats.type = stats.isDirectory() ? '文件夹' : '文件';
+                t.value = stats;
+                resolve(t);
+            }
+        });
+    })
 }
 
-
-function loadDir(r,rela,req,res) {
-  fs.readdir(r,function (err,files) {
-    if(err) throw err;
-    if(r!==root){
-        var d = r.substring(0,r.lastIndexOf('/'));
-        Promise.resolve(d).then(v=>{
-            fs.readdir(v,function (err, files) {
-                if(err) throw err;
-                fn(files,r.substring(r.lastIndexOf('/')+1));
+function loadDir(r, rela, req, res) {
+    fs.readdir(r, function (err, files) {
+        if (err) throw err;
+        if (r !== root) {
+            var d = r.substring(0, r.lastIndexOf('/'));
+            Promise.resolve(d).then(v => {
+                fs.readdir(v, function (err, files) {
+                    if (err) {
+                        throw err;
+                    }
+                    fn(files, r.substring(r.lastIndexOf('/') + 1));
+                })
             })
-        })
-    }else {
-        fn();
-    }
-    function fn(list,f) {
-        var o ={};
-        if(list){
-            var i = list.indexOf(f);
-            if(i>=0) {
-                o.prev = list[i - 1];
-                o.next = list[i + 1];
-            }
+        } else {
+            fn();
         }
-        Promise.all(files.map((x,i,a)=>{return statP(r,x);}))
-            .then(function (results) {
-				var values=[];
-				results.forEach(x=>{
-					if(x.state==='ok'){
-						values.push(x.value);
-					}else
-						console.error(x.reason);
-				});
-                res.render('file',Object.extend(o,
+        function fn(list, f) {
+            var o = {};
+            if (list) {
+                var i = list.indexOf(f);
+                if (i >= 0) {
+                    o.prev = list[i - 1];
+                    o.next = list[i + 1];
+                }
+            }
+            Promise.all(files.map((x, i, a) => {
+                return statP(r, x);
+            })).then(function (results) {
+                var values = [];
+                results.forEach(x => {
+                    if (x.state === 'ok') {
+                        values.push(x.value);
+                    } else {
+                        console.error(x.reason);
+                    }
+                });
+                var folders = [];
+                var files = [];
+                for (var i = 0; i < values.length; i++) {
+                    if (values[i]['type'] == '文件夹') {
+                        folders.push(values[i]);
+                    } else {
+                        files.push(values[i]);
+                    }
+                }
+                //文件夹按照时间排序
+                folders.sort(function (a, b) {
+                    return b['mtime'] - a['mtime'];
+                });
+                //文件按照时间排序
+                files.sort(function (a, b) {
+                    return b['mtime'] - a['mtime'];
+                });
+                values = [];
+                for (var i = 0; i < folders.length; i++) {
+                    values.push(folders[i]);
+                }
+                for (var i = 0; i < files.length; i++) {
+                    values.push(files[i]);
+                }
+                res.render('file', Object.extend(o,
                     {
-                        title:'HTTP文件查看',
-                        dirname:rela,
-                        files : values.map(x=> {
+                        title: 'FTP/在线预览',
+                        dirname: rela,
+                        files: values.map(x => {
                             return {
                                 type: x.type,
                                 name: x.name,
@@ -98,104 +130,131 @@ function loadDir(r,rela,req,res) {
                         })
                     })
                 );
-            },console.error)
-    }
-  });
+            }, console.error)
+        }
+    });
 }
 Number.prototype.toSize = function () {
-    if(this<1024){
-        return this+"B";
-    }else if(this<1024<<10){
-        return (this/1024).toFixed(2)+"KB";
-    }else if(this<1024<<20){
-        return (this/(1024<<10)).toFixed(2)+"MB";
-    }else{
-        return (this/(1024<<20)).toFixed(2)+"GB";
+    if (this < 1024) {
+        return this + "B";
+    } else if (this < 1024 << 10) {
+        return (this / 1024).toFixed(2) + "KB";
+    } else if (this < 1024 << 20) {
+        return (this / (1024 << 10)).toFixed(2) + "MB";
+    } else {
+        return (this / (1024 << 20)).toFixed(2) + "GB";
     }
 }
 Object.extend = function (src) {
-    Array.prototype.slice.call(arguments,1)
-        .forEach(x=>{
-            for(var k in x)
-                src[k]=x[k];
+    Array.prototype.slice.call(arguments, 1)
+        .forEach(x => {
+            for (var k in x)
+                src[k] = x[k];
         })
     return src;
 }
-function loadFile(file,rela,noraw,res){
-    if(!!noraw){
-        if(file!==root){
-            var d = file.substring(0,file.lastIndexOf('/'));
-            Promise.resolve(d).then(v=>{
-                fs.readdir(v,(err,files)=>{
-                    fn(files,file.substring(file.lastIndexOf('/')+1));
+function loadFile(file, rela, noraw, res) {
+    if (!!noraw) {
+        if (file !== root) {
+            var d = file.substring(0, file.lastIndexOf('/'));
+            Promise.resolve(d).then(v => {
+                fs.readdir(v, (err, files) => {
+                    fn(files, file.substring(file.lastIndexOf('/') + 1));
                 })
             });
-        }else fn();
-        function fn(list,f) {
-            var o ={};
-            if(list){
+        } else fn();
+        function fn(list, f) {
+            var o = {};
+            if (list) {
                 var i = list.indexOf(f);
-                if(i>=0) {
+                if (i >= 0) {
                     o.prev = list[i - 1];
                     o.next = list[i + 1];
                 }
             }
-            o = Object.extend(o,{
-                dirname:rela,
-                title:f,
-                src:f
+            o = Object.extend(o, {
+                dirname: rela,
+                title: f,
+                src: f
             });
 
-            if(f.match(/\.(avi|mp4|mkv|rmvb|mpg|rm|wma)$/i)){
-                res.render('video',o);
-            }else if(f.match(/\.(jpg|png|bmp|jpeg|gif)$/i)){
-                res.render('img',o);
-            }else if(f.match(/\.(mp3|wma|aac)$/i)){
-                res.render('audio',o);
-            }else if(f.match(/\.(md|markdown)$/i)){
-                fs.readFile(file,(error,data) => {
-                    if(error) throw error;
+            if (f.match(/\.(avi|mp4|mkv|rmvb|mpg|rm|wma)$/i)) {
+                res.render('video', o);
+            } else if (f.match(/\.(jpg|png|bmp|jpeg|gif)$/i)) {
+                res.render('img', o);
+            } else if (f.match(/\.(mp3|wma|aac)$/i)) {
+                res.render('audio', o);
+            } else if (f.match(/\.(md|markdown)$/i)) {
+                fs.readFile(file, (error, data) => {
+                    if (error) {
+                        throw error;
+                    }
                     o.content = data.toString();
-                    res.render('md',o);
+                    res.render('md', o);
                 });
-            }else if(f.match(/\.(java|c|cpp|js|css|jsp|php|json|txt)$/i)){
-                fs.readFile(file,(error,data) => {
-                    if(error) throw error;
+            } else if (f.match(/\.(java|c|cpp|js|css|jsp|php|json)$/i)) {
+                fs.readFile(file, (error, data) => {
+                    if (error) {
+                        throw error;
+                    }
                     o.content = data.toString();
-                    res.render('code',o);
+                    res.render('code', o);
                 });
-            }else if(f.match(/\.(html|htm)$/i)){
-                fs.readFile(file,(error,data) => {
-                    if(error) throw error;
+            } else if (f.match(/\.(txt)$/i)) {
+                // console.log('fuck you');
+                fs.readFile(file, (error, data) => {
+                    if (error) {
+                        throw error;
+                    }
+                    var iconv = require('iconv-lite');
+                    //首先用UTF-8解码
+                    var content = iconv.decode(data, 'UTF-8');
+                    //判断txt编码格式为ANSI
+                    if (content.indexOf('�') != -1) {
+                        content = iconv.decode(data, 'GB2312');
+                    }
+                    //unicode与unicode-big-endian 编码
+                    if (content.indexOf('\u0000') != -1) {
+                        content = iconv.decode(data, 'UTF-16');
+                    }
+                    o.content = content.toString('utf8');
+                    res.render('code', o);
+                });
+            } else if (f.match(/\.(html|htm)$/i)) {
+                fs.readFile(file, (error, data) => {
+                    if (error) {
+                        throw error; //yy
+                    }
                     o.content = data.toString();
-                    res.render('html',o);
+                    res.render('html', o);
                 });
-            }else{
-                res.sendFile(rela,{root:global.root});
+            } else {
+                res.sendFile(rela, { root: global.root });
             }
         }
-    }else{
-        res.sendFile(rela,{root:global.root});
+    } else {
+        res.sendFile(rela, { root: global.root });
     }
 }
 
-exports.index = function(req, res){
-    var arg = url.parse(req.originalUrl,true),
+exports.index = function (req, res) {
+    var arg = url.parse(req.originalUrl, true),
         query = arg.query;
     var root = global.root;
+    console.log(root);
     var r = decodeURIComponent(arg.pathname);
-    r=r==='/'?'':r;
+    r = r === '/' ? '' : r;
 
-    var t = r.replace(/(\/$)/g,'');
-    console.info(r,t,query);
-    if(!query.compress){
-        var state = fs.statSync(root+r);
-        if(state.isDirectory())
-            loadDir(root+t,t, req, res);
-        else
-            loadFile(root+t,t,query.noraw,res);
-    }else{
-        loadZip(root+t,t,req,res);
+    var t = r.replace(/(\/$)/g, '');
+    if (!query.compress) {
+        var state = fs.statSync(root + r);
+        if (state.isDirectory()) {
+            loadDir(root + t, t, req, res);
+        } else {
+            loadFile(root + t, t, query.noraw, res);
+        }
+    } else {
+        loadZip(root + t, t, req, res);
     }
 };
 
@@ -210,8 +269,13 @@ Date.prototype.format = function (fmt) { //author: meizz
         "q+": Math.floor((this.getMonth() + 3) / 3), //季度
         "S": this.getMilliseconds() //毫秒
     };
-    if (/(y+)/.test(fmt)) fmt = fmt.replace(RegExp.$1, (this.getFullYear() + "").substr(4 - RegExp.$1.length));
-    for (var k in o)
-        if (new RegExp("(" + k + ")").test(fmt)) fmt = fmt.replace(RegExp.$1, (RegExp.$1.length == 1) ? (o[k]) : (("00" + o[k]).substr(("" + o[k]).length)));
+    if (/(y+)/.test(fmt)) {
+        fmt = fmt.replace(RegExp.$1, (this.getFullYear() + "").substr(4 - RegExp.$1.length));
+    }
+    for (var k in o) {
+        if (new RegExp("(" + k + ")").test(fmt)) {
+            fmt = fmt.replace(RegExp.$1, (RegExp.$1.length == 1) ? (o[k]) : (("00" + o[k]).substr(("" + o[k]).length)));
+        }
+    }
     return fmt;
 }
