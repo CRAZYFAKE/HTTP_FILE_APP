@@ -5,7 +5,7 @@ extends layout
 block content
     -dirname=dirname.replace(/\/*$/,'');
     div.container-fluid
-        h1=dirname===''?'/':dirname
+        h2=dirname===''?'/': global.root + dirname
         include btns
         div.table-responsive
             table.table.table-striped

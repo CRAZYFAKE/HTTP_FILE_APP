@@ -92,30 +92,7 @@ function loadDir(r, rela, req, res) {
                         console.error(x.reason);
                     }
                 });
-                var folders = [];
-                var files = [];
-                for (var i = 0; i < values.length; i++) {
-                    if (values[i]['type'] == '文件夹') {
-                        folders.push(values[i]);
-                    } else {
-                        files.push(values[i]);
-                    }
-                }
-                //文件夹按照时间排序
-                folders.sort(function (a, b) {
-                    return b['mtime'] - a['mtime'];
-                });
-                //文件按照时间排序
-                files.sort(function (a, b) {
-                    return b['mtime'] - a['mtime'];
-                });
-                values = [];
-                for (var i = 0; i < folders.length; i++) {
-                    values.push(folders[i]);
-                }
-                for (var i = 0; i < files.length; i++) {
-                    values.push(files[i]);
-                }
+                // values = sort(values);
                 res.render('file', Object.extend(o,
                     {
                         title: 'FTP/在线预览',
@@ -162,10 +139,12 @@ function loadFile(file, rela, noraw, res) {
                     fn(files, file.substring(file.lastIndexOf('/') + 1));
                 })
             });
-        } else fn();
+        } else {
+            fn();
+        }
         function fn(list, f) {
             var o = {};
-            if (list) {
+            if (list) { 
                 var i = list.indexOf(f);
                 if (i >= 0) {
                     o.prev = list[i - 1];
@@ -237,11 +216,40 @@ function loadFile(file, rela, noraw, res) {
     }
 }
 
+function sort(values) {
+    var folders = [];
+    var files = [];
+    for (var i = 0; i < values.length; i++) {
+        if (values[i]['type'] == '文件夹') {
+            folders.push(values[i]);
+        } else {
+            files.push(values[i]);
+        }
+    }
+    //文件夹按照时间排序
+    folders.sort(function (a, b) {
+        // return b['mtime'] - a['mtime']; //按照修改时间排序
+        return a['name'].localeCompare(b['name']); //按照文件夹名排序
+    });
+    //文件按照时间排序
+    files.sort(function (a, b) {
+        // return b['mtime'] - a['mtime']; //按照修改时间排序
+        return a['name'].localeCompare(b['name']); //按照文件名排序
+    });
+    values = [];
+    for (var i = 0; i < folders.length; i++) {
+        values.push(folders[i]);
+    }
+    for (var i = 0; i < files.length; i++) {
+        values.push(files[i]);
+    }
+    return values;
+}
+
 exports.index = function (req, res) {
     var arg = url.parse(req.originalUrl, true),
         query = arg.query;
     var root = global.root;
-    console.log(root);
     var r = decodeURIComponent(arg.pathname);
     r = r === '/' ? '' : r;
 
